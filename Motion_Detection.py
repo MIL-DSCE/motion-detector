@@ -1,26 +1,50 @@
 from pydrive.drive import GoogleDrive
 from pydrive.auth import GoogleAuth
 import cv2
+from multiprocessing import Process
 import numpy as np
 import datetime
 import time
 import smtplib
 
+# make count 0
+count = 0
+
+def sf(t2):
+    cv2.imwrite("/home/pi/Desktop/StoredImages/frame%d.jpg" % count, t2)
+
 # 'google drive authentication' stuff
 gauth = GoogleAuth()
+
+# try to load saved client credentials
+gauth.LoadCredentialsFile("mycreds.txt")
+if gauth.credentials is None:
+    # authenticate if not there
+    gauth.LocalWebserverAuth()
+elif gauth.access_token_expired:
+    # Refresh them if expired
+    gauth.Refresh()
+else:
+    # Initialize the saved creds
+    gauth.Authorize()
+# Save the current credentials to a file
+gauth.SaveCredentialsFile("mycreds.txt")
+
 drive = GoogleDrive(gauth)
+
+def upload_file():
+    file1 = drive.CreateFile({'parent':'/home/pi/Desktop/StoredImages/'})
+    file1.SetContentFile('/home/pi/Desktop/StoredImages/frame%d.jpg' % count)
+    file1.Upload()
 
 # 'sending an email' stuff
 server = smtplib.SMTP('smtp.gmail.com',587)
 server.starttls()
 server.login("sparshbbhs@gmail.com","thisisatest")
-msg = "Motion Detected! See Google Drive."
+msg = "Motion Detected! For more details check your Drive."
 
 # capture Video from the camera module
 cap = cv2.VideoCapture(0)
-
-# make count 0
-count = 0
 
 # stores the present date and time
 lastUploaded = datetime.datetime.now()
@@ -80,13 +104,15 @@ while True:
 
             # if 8 motions occured in 2 secs
             if motionCounter >= 8:
-                # write to a temporary file location
-                cv2.imwrite("/home/pi/Desktop/StoredImages/frame%d.jpg" % count, t2)
+                # write to a temporary file location using threads
+                new_process = Process(target=sf, args=(t2,))
+                new_process.start()
+                new_process.join()
 
-                # upload the temporary pic to Google drive
-                file1 = drive.CreateFile({'parent':'/home/pi/Desktop/StoredImages/'})
-                file1.SetContentFile('/home/pi/Desktop/StoredImages/frame%d.jpg' % count)
-                file1.Upload()
+                # upload the temporary pic to Google drive using threads
+                new_process = Process(target=upload_file)
+                new_process.start()
+                new_process.join()
 
                 # sending a mail about motion detected
                 server.sendmail("sparshbbhs@gmail.com","skkumarsparsh@gmail.com",msg)
