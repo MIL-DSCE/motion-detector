@@ -10,14 +10,12 @@ import smtplib
 # make count 0
 count = 0
 
-def sf(t2):
-    cv2.imwrite("/home/pi/Desktop/StoredImages/frame%d.jpg" % count, t2)
-
 # 'google drive authentication' stuff
 gauth = GoogleAuth()
 
 # try to load saved client credentials
 gauth.LoadCredentialsFile("mycreds.txt")
+
 if gauth.credentials is None:
     # authenticate if not there
     gauth.LocalWebserverAuth()
@@ -27,12 +25,15 @@ elif gauth.access_token_expired:
 else:
     # Initialize the saved creds
     gauth.Authorize()
+    
 # Save the current credentials to a file
 gauth.SaveCredentialsFile("mycreds.txt")
 
 drive = GoogleDrive(gauth)
 
-def upload_file():
+# function to save a local frame and then upload the file to Google Drive
+def upload_file(t2):
+    cv2.imwrite("/home/pi/Desktop/StoredImages/frame%d.jpg" % count, t2)
     file1 = drive.CreateFile({'parent':'/home/pi/Desktop/StoredImages/'})
     file1.SetContentFile('/home/pi/Desktop/StoredImages/frame%d.jpg' % count)
     file1.Upload()
@@ -104,15 +105,11 @@ while True:
 
             # if 8 motions occured in 2 secs
             if motionCounter >= 8:
-                # write to a temporary file location using threads
-                new_process = Process(target=sf, args=(t2,))
+                
+                # write to a temporary file location and upload
+                # in the background using multiprocessing
+                new_process = Process(target=upload_file, args=(t2,))
                 new_process.start()
-                new_process.join()
-
-                # upload the temporary pic to Google drive using threads
-                new_process = Process(target=upload_file)
-                new_process.start()
-                new_process.join()
 
                 # sending a mail about motion detected
                 server.sendmail("sparshbbhs@gmail.com","skkumarsparsh@gmail.com",msg)
